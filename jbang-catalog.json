@@ -1,0 +1,10 @@
+{
+  "catalogs": {},
+  "aliases": {
+    "install-kernel": {
+      "script-ref": "installkernel.java",
+      "java-agents": []
+    }
+  },
+  "templates": {}
+}
