@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -49,13 +50,32 @@ class installkernel implements Callable<Integer> {
                     String ga() { return "io.github.padreati:rapaio-jupyter-kernel"; } 
                     String v() { return "1.3.0"; }
                     String javaVersion() { return "21"; }
+                    List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
+                }
+               /** needs classpath argument that is too tricky to do manually
+                    See https://github.com/jbangdev/jbang/issues/1703  
+                ,KOTLIN {
+                    String shortName() { return "Kotlin"; }
+                    String ga() { return "org.jetbrains.kotlinx:kotlin-jupyter-kernel-shadowed"; } 
+                    String v() { return "0.12.0-85"; }
+                    String javaVersion() { return "11"; }
+                    String mainClass() { return "org.jetbrains.kotlinx.jupyter.IkotlinKt"; }
+                    List<String> dependencies() {
+                        return List.of("org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85");
+                    } 
                 };
+                    **/
+                    ;
+                
 
             String shortName() { return name().substring(0, 1).toUpperCase() + name().substring(1); }
             abstract String ga();
             String v() { return "RELEASE"; }
             String gav() { return ga() + ":" + v(); }
             String javaVersion() { return "11+"; }
+            String mainClass() { return null; }
+            List<String> dependencies() { return List.of(); }
+            List<String> modules() { return List.of(); }
 
         }
 
@@ -171,12 +191,26 @@ class installkernel implements Callable<Integer> {
         if (command == null) {
             throw new IllegalStateException("jbang executable not found in PATH. Please ensure it is available before running javajupyter.");
         }
-        KernelJson json = new KernelJson(List.of(command.toAbsolutePath().toString(), 
-                                "--java", kernel.javaVersion(),
-                                "-R--add-modules",
-                                "-Rjava.base,jdk.incubator.vector",
-                                kernel.gav(),
-                                CONNECTION_FILE_MARKER), 
+        var commandList = new ArrayList<String>(); 
+        commandList.add(command.toAbsolutePath().toString());
+        commandList.add("--java");
+        commandList.add(kernel.javaVersion());
+        
+        if(kernel.mainClass()!=null) {
+            commandList.add("-m");
+            commandList.add(kernel.mainClass());
+        }
+
+        if(kernel.modules().size()>0) {
+            commandList.add("-R--add-modules");
+            commandList.add("-R" + String.join(",", kernel.modules()));
+        }
+        
+        commandList.add(kernel.gav());
+        
+        commandList.add(CONNECTION_FILE_MARKER);
+
+        KernelJson json = new KernelJson(commandList, 
                                 name(), 
                                 LANGUAGE, 
                                 INTERRUPT_MODE, 
