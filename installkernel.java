@@ -30,11 +30,10 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
-@Command(name = "javajupyter", mixinStandardHelpOptions = true, version = "javajupyter 0.1",
-        description = "javajupyter made with jbang", showDefaultValues=true)
+@Command(name = "install-kernel", mixinStandardHelpOptions = true, version = "install-kernel 0.1",
+        description = "Installs JVM based Kernels that can be run via maven artifacts using JBang", showDefaultValues=true)
 class installkernel implements Callable<Integer> {
 
-    private static final String SEPARATOR = "/";
     private static final String CONNECTION_FILE_MARKER = "{connection_file}";
     private static final String LANGUAGE = "java";
     private static final String INTERRUPT_MODE = "message";
@@ -44,13 +43,33 @@ class installkernel implements Callable<Integer> {
                     String shortName() { return "IJava"; }
                     String ga() { return "com.github.waikato.thirdparty:ijava"; } 
                     String v() { return "1.3.0"; }
+                    String info() { return "https://github.com/SpencerPark/IJava";}
                 },
                 RAPAIO { 
+                    String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
                     String shortName() { return "Rapaio"; }
                     String ga() { return "io.github.padreati:rapaio-jupyter-kernel"; } 
                     String v() { return "1.3.0"; }
                     String javaVersion() { return "21"; }
                     List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
+                    Map<String, String> options(String compilerOptions, long timeout) {
+                        return Map.of(
+                                    "RJK_COMPILER_OPTIONS",compilerOptions,
+                                    "RJK_INIT_SCRIPT", "",
+                                    "RJK_TIMEOUT_MILLIS", ""+timeout);
+                    }
+                },
+                GANYMEDE { 
+                    String info() { return "https://github.com/allen-ball/ganymede"; }
+                    String shortName() { return "Ganymede"; }
+                    String ga() { return "dev.hcf.ganymede:ganymede"; } 
+                    String v() { return "2.1.2.20230910"; }
+                    String javaVersion() { return "11"; }
+                    List<String> arguments() { return List.of(
+                            //from Ganymede Install.java
+                        "-f", CONNECTION_FILE_MARKER); }
+
+                  // List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
                 }
                /** needs classpath argument that is too tricky to do manually
                     See https://github.com/jbangdev/jbang/issues/1703  
@@ -74,32 +93,50 @@ class installkernel implements Callable<Integer> {
             String gav() { return ga() + ":" + v(); }
             String javaVersion() { return "11+"; }
             String mainClass() { return null; }
+            String language() { return LANGUAGE;}
             List<String> dependencies() { return List.of(); }
             List<String> modules() { return List.of(); }
-
+            List<String> jvmArguments() { return List.of(
+                "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+                        "--illegal-access=permit"
+                     //   "-Djava.awt.headless=true",
+                     //   "-Djdk.disableLastUsageTracking=true"
+            );}
+            List<String> arguments() { return List.of(CONNECTION_FILE_MARKER); }
+            Map<String, String> options(String compilerOptions, long timeout) {
+                return Map.of();
+            }
+            String info() { return null; }
         }
 
-        @Option(names = "--kernel", defaultValue = "rapaio")
+
+        @Parameters(index = "0", defaultValue = "ijava", description = "The kernel to install. Possible values: ${COMPLETION-CANDIDATES}")
         Kernels kernel;
+
+        @Option(names = "--verbose")
+        boolean verbose;
 
         @Option(names = "--name")
         String name;
 
         String name() { 
-            return name==null?"Java (JBang " + kernel.shortName() + ")":name;
+            return name==null? kernel.shortName() + " - " + kernel.language() + " (JBang)":name;
         }
 
-        @Option(names = "--kernel-dir")
+        @Option(names = "--jupyter-kernel-dir", description = "The name of directory to install the kernel to. Defaults to OS specific location.")
+        String jupyterKernelDir;
+
+        @Option(names = "--kernel-dir", description = "The name of directory to install the kernel to. Defaults to jbang-<kernel>")
         String kernelDir;
 
         String kernelDir() { 
             return kernelDir==null?"jbang-" + kernel.name().toLowerCase():kernelDir;
         }
 
-        @Option(names="--timeout", defaultValue = "-1")
+        @Option(names="--timeout", defaultValue = "-1", description = "Timeout in milliseconds for kernel execution")
         long timeout;
 
-        @Option(names="--compiler-options", defaultValue = "")
+        @Option(names="--compiler-options", defaultValue = "", description = "Compiler options to pass to the kernel")
         String compilerOptions;
 
         private enum OSName {
@@ -165,9 +202,14 @@ class installkernel implements Callable<Integer> {
             throw new RuntimeException("Operating system is not recognized. Installation failed.");
         }
 
-        List<String> installationPath = getInstallationPaths(findOSName());
+        List<String> installationPath = null;
+        if(jupyterKernelDir!=null) {
+            installationPath = List.of(jupyterKernelDir);
+        } else {
+            installationPath = getInstallationPaths(os);
+        }
 
-        System.out.println("Considering " + String.join(",", installationPath));
+        verbose("Considering " + String.join(",", installationPath));
         
         Path command = null;
         String[] paths = System.getenv("PATH").split(File.pathSeparator);
@@ -205,19 +247,21 @@ class installkernel implements Callable<Integer> {
             commandList.add("-R--add-modules");
             commandList.add("-R" + String.join(",", kernel.modules()));
         }
+
+        kernel.jvmArguments().forEach(jvmArg -> {
+            commandList.add("-R" + jvmArg);
+        });
         
         commandList.add(kernel.gav());
         
-        commandList.add(CONNECTION_FILE_MARKER);
+        
+        commandList.addAll(kernel.arguments());
 
         KernelJson json = new KernelJson(commandList, 
                                 name(), 
-                                LANGUAGE, 
+                                kernel.language(), 
                                 INTERRUPT_MODE, 
-                                Map.of(
-                                    "RJK_COMPILER_OPTIONS",compilerOptions,
-                                    "RJK_INIT_SCRIPT", "",
-                                    "RJK_TIMEOUT_MILLIS", ""+timeout));
+                                kernel.options(compilerOptions, timeout));
 
 
         ObjectMapper objectMapper = new ObjectMapper();
@@ -230,20 +274,35 @@ class installkernel implements Callable<Integer> {
 
         String jsonString = objectMapper.writeValueAsString(json);
 
+        if(!Files.exists(Paths.get(installationPath.get(0)))) {
+            throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before running javajupyter.");
+        }
+
         var output = Paths.get(installationPath.get(0), kernelDir(), "kernel.json");
 
-        out.println(format("Writing: %s\nto %s", jsonString, output));
+        verbose(format("Writing: %s\nto %s", jsonString, output));
         try {
             if (!Files.exists(output.getParent())) {
                 Files.createDirectories(output.getParent());
             }
             Files.write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
+            System.out.println(kernel.shortName() + " kernel installed to " + output);
+            if(kernel.info()!=null) {
+                System.out.println("For more information on this specific kernel: " + kernel.info());
+            }
+            System.out.println("\nBrought to you by https://github.com/jupyter-java");
+       } catch (IOException e) {
             e.printStackTrace();
         }
         
 
         return 0;
+    }
+
+    void verbose(String msg) { 
+        if(verbose) {
+            out.println(msg);
+        }
     }
 
     
