@@ -222,9 +222,19 @@ class installkernel implements Callable<Integer> {
         return paths;
     }
 
+    /**
+     * Looks for command in jbang bin dir and then in PATH
+     * @param cmd
+     * @return
+     */
     private Path findCommand(String cmd) {
         Path command = null;
-        String[] paths = System.getenv("PATH").split(File.pathSeparator);
+        List<String> paths = new ArrayList<>();
+
+        paths.add(System.getProperty("user.dir") + "/.jbang/bin");
+
+        paths.addAll(Arrays.asList(System.getenv("PATH").split(File.pathSeparator)));
+
         for (String path : paths) {
             if (os.equals(OSName.WINDOWS)) {
                 command = Path.of(path, cmd + ".cmd");
@@ -242,6 +252,7 @@ class installkernel implements Callable<Integer> {
             }
             command = null;
         }
+
         return command;
     }
     public static void main(String... args) {
