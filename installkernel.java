@@ -14,8 +14,13 @@ import static java.nio.file.Files.createDirectories;
 import static java.nio.file.Files.exists;
 import static java.nio.file.Files.write;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -24,7 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
@@ -201,57 +208,64 @@ class installkernel implements Callable<Integer> {
         };
     }
 
-    public static void main(String... args) {
-        int exitCode = new CommandLine(new installkernel()).setCaseInsensitiveEnumValuesAllowed(true).execute(args);
-        System.exit(exitCode);
-    }
-
-     private installkernel.KernelJson generateProxyKernelJson(installkernel.Kernels kernel, installkernel.KernelJson kernelJson) {
-
-        /**
-         * {
-  "argv": [
-    "/opt/homebrew/opt/python@3.11/bin/python3.11",
-    "/Users/manderse/Library/Jupyter/kernels/jbang-kotlin/ipc_proxy_kernel.py",
-    "{connection_file}",
-    "--kernel=jbang-kotlin_tcp"
-  ],
-  "env": {},
-  "display_name": "Kotlin - kotlin (JBang)",
-  "language": "kotlin",
-  "interrupt_mode": "message",
-  "metadata": {}
-}
-         */
-
-         KernelJson proxyKernel = new KernelJson(List.of("python3", "ipc_proxy_kernel.py", CONNECTION_FILE_MARKER, "--kernel="+kernel.shortName()), 
-                        kernel.name() + "_proxy", 
-                        kernel.language(), 
-                        INTERRUPT_MODE, Map.of());
-
-        return proxyKernel;
-    }
-
-    KernelJson generateJavaKernelJson() {
+    private Path findCommand(String cmd) {
         Path command = null;
         String[] paths = System.getenv("PATH").split(File.pathSeparator);
         for (String path : paths) {
             if (os.equals(OSName.WINDOWS)) {
-                command = Path.of(path, "jbang.cmd");
+                command = Path.of(path, cmd + ".cmd");
                 if (exists(command) && Files.isExecutable(command)) {
                     break;
                 } 
-                command = Path.of(path, "jbang.ps1");
+                command = Path.of(path, cmd + ".ps1");
                 if (exists(command) && Files.isExecutable(command)) {
                     break;
                 } 
             }
-            command = Path.of(path, "jbang");
+            command = Path.of(path, cmd);
             if (exists(command) && Files.isExecutable(command)) {
                 break;
             }
             command = null;
         }
+        return command;
+    }
+    public static void main(String... args) {
+        int exitCode = new CommandLine(new installkernel()).setCaseInsensitiveEnumValuesAllowed(true).execute(args);
+        System.exit(exitCode);
+    }
+
+     private KernelJson generateProxyKernelJson(KernelJson kernelJson) {
+
+        String proxyApp = loadResource("ipc_proxy_kernel.py");
+        String pycmd;
+
+        Path pythonCommand = findCommand("python");
+        if (pythonCommand == null) {
+            pythonCommand = findCommand("python3");
+        }
+        if (pythonCommand == null) {
+            throw new IllegalStateException("Python executable not found in PATH. Please ensure it is available before installing kernel.");
+        }
+        pycmd = pythonCommand.toAbsolutePath().toString();
+        
+         KernelJson proxyKernel = new KernelJson(
+                        List.of(pycmd, 
+                             "ipc_proxy_kernel.py", 
+                                CONNECTION_FILE_MARKER, 
+                                "--kernel="+kernelJson.kernelDir()), 
+                        name() + "-ipc", 
+                        kernel.language(), 
+                        INTERRUPT_MODE, 
+                        Map.of(),
+                        kernelDir() + "-ipc",
+                        Map.of(Path.of("ipc_proxy_kernel.py"), proxyApp));
+
+        return proxyKernel;
+    }
+
+    KernelJson generateJavaKernelJson() {
+        Path command = findCommand("jbang");
         if (command == null) {
             throw new IllegalStateException("jbang executable not found in PATH. Please ensure it is available before running javajupyter.");
         }
@@ -283,7 +297,9 @@ class installkernel implements Callable<Integer> {
                                 name(), 
                                 kernel.language(), 
                                 INTERRUPT_MODE, 
-                                kernel.options(compilerOptions, timeout));
+                                kernel.options(compilerOptions, timeout),
+                                kernelDir(),
+                                Map.of());
         return json;
     }
 
@@ -314,11 +330,14 @@ class installkernel implements Callable<Integer> {
         writeKernel(installationPath.get(0), json);
 
         if(useIPC) {
-            out.println("Installing proxy kernel");
-            json = generateProxyKernelJson(kernel, json);
+            json = generateProxyKernelJson(json);
             writeKernel(installationPath.get(0), json);
         }
         
+        if(kernel.info()!=null) {
+                out.println("For more information on this specific kernel: " + kernel.info());
+        }
+        out.println("\nBrought to you by https://github.com/jupyter-java");
         return 0;
     }
 
@@ -329,7 +348,7 @@ class installkernel implements Callable<Integer> {
 
         String jsonString = objectMapper.writeValueAsString(json);
 
-        var output = Paths.get(installationPath, kernelDir(), "kernel.json");
+        var output = Paths.get(installationPath, json.kernelDir(), "kernel.json");
 
         verbose(format("Writing: %s\nto %s", jsonString, output));
         try {
@@ -337,11 +356,21 @@ class installkernel implements Callable<Integer> {
                 createDirectories(output.getParent());
             }
             write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            out.println(kernel.shortName() + " kernel installed to " + output);
-            if(kernel.info()!=null) {
-                out.println("For more information on this specific kernel: " + kernel.info());
-            }
-            out.println("\nBrought to you by https://github.com/jupyter-java");
+            out.println(json.displayName + " kernel installed to " + output);
+            json.resources().forEach((path, content) -> {
+                try {
+                    Path resource = Paths.get(installationPath, json.kernelDir, path.toString());
+                    System.out.println(format("Additional file: %s", resource));
+                    if (!exists(resource.getParent())) {
+                        createDirectories(resource.getParent());
+                    }
+                    write(resource, content.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                } catch (IOException e) {
+                   System.err.println("Could not write resource " + path + " to " + output);
+                }
+            });
+
+            
        } catch (IOException e) {
             e.printStackTrace();
         }
@@ -364,6 +393,15 @@ class installkernel implements Callable<Integer> {
         }
     }
 
+    public static String loadResource(String resourcePath) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream inputStream = classLoader.getResourceAsStream(resourcePath);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining("\n"));
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not load resource: " + resourcePath, e);
+        }
+    } 
     
 
 public record KernelJson(
@@ -371,6 +409,8 @@ public record KernelJson(
         String displayName,
          String language,
          String interruptMode,
-        Map<String, String> env) {
+        Map<String, String> env,
+        @JsonIgnore String kernelDir,
+        @JsonIgnore Map<Path, String> resources) {
 }
 }
