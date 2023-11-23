@@ -354,7 +354,7 @@ class installkernel implements Callable<Integer> {
         KernelJson json = generateJavaKernelJson();
         writeKernel(installationPath.get(0), json);
 
-        if(useIPC) {
+        if(useIPC || "ipc".equals(System.getenv("COLAB_JUPYTER_TRANSPORT"))) {
             json = generateProxyKernelJson(json);
             writeKernel(installationPath.get(0), json);
         }
