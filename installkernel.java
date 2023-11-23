@@ -231,7 +231,7 @@ class installkernel implements Callable<Integer> {
         Path command = null;
         List<String> paths = new ArrayList<>();
 
-        paths.add(System.getProperty("user.dir") + "/.jbang/bin");
+        paths.add(System.getProperty("user.home") + "/.jbang/bin");
 
         paths.addAll(Arrays.asList(System.getenv("PATH").split(File.pathSeparator)));
 
@@ -260,7 +260,7 @@ class installkernel implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-     private KernelJson generateProxyKernelJson(KernelJson kernelJson) {
+     private KernelJson generateProxyKernelJson(String path, KernelJson kernelJson) {
 
         String proxyApp = loadResource("ipc_proxy_kernel.py");
         String pycmd;
@@ -276,7 +276,7 @@ class installkernel implements Callable<Integer> {
 
          KernelJson proxyKernel = new KernelJson(
                         List.of(pycmd, 
-                             "ipc_proxy_kernel.py", 
+                             Path.of(path, kernelJson.kernelDir, "ipc_proxy_kernel.py").toAbsolutePath().toString(), 
                                 CONNECTION_FILE_MARKER, 
                                 "--kernel="+kernelJson.kernelDir), 
                         name() + "-ipc", 
@@ -292,7 +292,7 @@ class installkernel implements Callable<Integer> {
     KernelJson generateJavaKernelJson() {
         Path command = findCommand("jbang");
         if (command == null) {
-            throw new IllegalStateException("jbang executable not found in PATH. Please ensure it is available before running javajupyter.");
+            throw new IllegalStateException("jbang executable not found. Please ensure it is available before running install kernel.");
         }
         var commandList = new ArrayList<String>(); 
         commandList.add(command.toAbsolutePath().toString());
@@ -355,7 +355,7 @@ class installkernel implements Callable<Integer> {
         writeKernel(installationPath.get(0), json);
 
         if(useIPC) {
-            json = generateProxyKernelJson(json);
+            json = generateProxyKernelJson(installationPath.get(0),json);
             writeKernel(installationPath.get(0), json);
         }
         
