@@ -5,11 +5,6 @@
 //DEPS com.fasterxml.jackson.core:jackson-databind:2.12.3
 //FILES ipc_proxy_kernel.py
 
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-
 import static java.lang.String.format;
 import static java.lang.System.out;
 import static java.nio.file.Files.createDirectories;
@@ -21,7 +16,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,8 +35,12 @@ import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.databind.SerializationFeature;
+
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 
 @Command(name = "install-kernel", mixinStandardHelpOptions = true, version = "install-kernel 0.1",
         description = "Installs JVM based Kernels that can be run via maven artifacts using JBang", showDefaultValues=true)
@@ -260,7 +258,7 @@ class installkernel implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-     private KernelJson generateProxyKernelJson(String path, KernelJson kernelJson) {
+     private KernelJson generateProxyKernelJson(KernelJson kernelJson) {
 
         String proxyApp = loadResource("ipc_proxy_kernel.py");
         String pycmd;
@@ -276,7 +274,7 @@ class installkernel implements Callable<Integer> {
 
          KernelJson proxyKernel = new KernelJson(
                         List.of(pycmd, 
-                             Path.of(path, kernelJson.kernelDir, "ipc_proxy_kernel.py").toAbsolutePath().toString(), 
+                             "{{KERNEL_DIR}}/ipc_proxy_kernel.py", 
                                 CONNECTION_FILE_MARKER, 
                                 "--kernel="+kernelJson.kernelDir), 
                         name() + "-ipc", 
@@ -357,7 +355,7 @@ class installkernel implements Callable<Integer> {
         writeKernel(installationPath.get(0), json);
 
         if(useIPC) {
-            json = generateProxyKernelJson(installationPath.get(0),json);
+            json = generateProxyKernelJson(json);
             writeKernel(installationPath.get(0), json);
         }
         
@@ -370,12 +368,21 @@ class installkernel implements Callable<Integer> {
 
   
 
-    private void writeKernel(String installationPath, KernelJson json) throws JsonProcessingException {
+    private void writeKernel(String installationPath, KernelJson original) throws JsonProcessingException {
         ObjectMapper objectMapper = setupObjectMapper();
 
-        String jsonString = objectMapper.writeValueAsString(json);
+        var fullKernelDir = Paths.get(installationPath, original.kernelDir).toAbsolutePath().toString();
+        var output = Paths.get(fullKernelDir, "kernel.json");
 
-        var output = Paths.get(installationPath, json.kernelDir, "kernel.json");
+        final var json = new KernelJson(original.argv.stream().map(arg -> arg.replace("{{KERNEL_DIR}}", fullKernelDir)).collect(Collectors.toList()), 
+                                original.displayName, 
+                                original.language, 
+                                original.interruptMode, 
+                                original.env,
+                                original.kernelDir,
+                                original.resources);
+
+        String jsonString = objectMapper.writeValueAsString(json);
 
         verbose(format("Writing: %s\nto %s", jsonString, output));
         try {
