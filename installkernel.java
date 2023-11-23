@@ -348,7 +348,9 @@ class installkernel implements Callable<Integer> {
         verbose("Considering " + String.join(",", installationPath));
         
         if(!exists(Paths.get(installationPath.get(0)))) {
-            throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before trying to install a kernel.");
+            System.out.println("Creating " + installationPath.get(0));
+            Files.createDirectories(Paths.get(installationPath.get(0)));
+           // throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before trying to install a kernel.");
         }
 
         KernelJson json = generateJavaKernelJson();
