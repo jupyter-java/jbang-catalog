@@ -1,4 +1,6 @@
+
 ///usr/bin/env jbang "$0" "$@" ; exit $?
+//JAVA 11+
 //DEPS info.picocli:picocli:4.6.3
 //DEPS com.fasterxml.jackson.core:jackson-databind:2.12.3
 //FILES ipc_proxy_kernel.py
@@ -26,6 +28,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -190,22 +193,33 @@ class installkernel implements Callable<Integer> {
 
         private List<String> getInstallationPaths(OSName os) {
 
-        return switch (os) {
-            case LINUX, SOLARIS -> List.of(
+        List<String> paths;
+        switch (os) {
+            case LINUX:
+            case SOLARIS:
+                paths = Arrays.asList(
                     getUserHome() + "/.local/share/jupyter/kernels",
                     "/usr/local/share/jupyter/kernels",
                     "/usr/share/jupyter/kernels"
-            );
-            case MAC -> List.of(
+                );
+                break;
+            case MAC:
+                paths = Arrays.asList(
                     getUserHome() + "/Library/Jupyter/kernels",
                     "/usr/local/share/jupyter/kernels",
                     "/usr/share/jupyter/kernels"
-            );
-            case WINDOWS -> List.of(
+                );
+                break;
+            case WINDOWS:
+                paths = Arrays.asList(
                     System.getenv("APPDATA") + "/jupyter/kernels",
                     System.getenv("PROGRAMDATA") + "/jupyter/kernels"
-            );
-        };
+                );
+                break;
+            default:
+                paths = new ArrayList<>();
+        }
+        return paths;
     }
 
     private Path findCommand(String cmd) {
@@ -248,12 +262,12 @@ class installkernel implements Callable<Integer> {
             throw new IllegalStateException("Python executable not found in PATH. Please ensure it is available before installing kernel.");
         }
         pycmd = pythonCommand.toAbsolutePath().toString();
-        
+
          KernelJson proxyKernel = new KernelJson(
                         List.of(pycmd, 
                              "ipc_proxy_kernel.py", 
                                 CONNECTION_FILE_MARKER, 
-                                "--kernel="+kernelJson.kernelDir()), 
+                                "--kernel="+kernelJson.kernelDir), 
                         name() + "-ipc", 
                         kernel.language(), 
                         INTERRUPT_MODE, 
@@ -348,7 +362,7 @@ class installkernel implements Callable<Integer> {
 
         String jsonString = objectMapper.writeValueAsString(json);
 
-        var output = Paths.get(installationPath, json.kernelDir(), "kernel.json");
+        var output = Paths.get(installationPath, json.kernelDir, "kernel.json");
 
         verbose(format("Writing: %s\nto %s", jsonString, output));
         try {
@@ -357,7 +371,7 @@ class installkernel implements Callable<Integer> {
             }
             write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             out.println(json.displayName + " kernel installed to " + output);
-            json.resources().forEach((path, content) -> {
+            json.resources.forEach((path, content) -> {
                 try {
                     Path resource = Paths.get(installationPath, json.kernelDir, path.toString());
                     System.out.println(format("Additional file: %s", resource));
@@ -404,13 +418,23 @@ class installkernel implements Callable<Integer> {
     } 
     
 
-public record KernelJson(
-         List<String> argv,
-        String displayName,
-         String language,
-         String interruptMode,
-        Map<String, String> env,
-        @JsonIgnore String kernelDir,
-        @JsonIgnore Map<Path, String> resources) {
+public class KernelJson {
+    public final List<String> argv;
+    public final String displayName;
+    public final String language;
+    public final String interruptMode;
+    public final Map<String, String> env;
+    @JsonIgnore public final String kernelDir;
+    @JsonIgnore public final Map<Path, String> resources;
+
+    public KernelJson(List<String> argv, String displayName, String language, String interruptMode, Map<String, String> env, String kernelDir, Map<Path, String> resources) {
+        this.argv = argv;
+        this.displayName = displayName;
+        this.language = language;
+        this.interruptMode = interruptMode;
+        this.env = env;
+        this.kernelDir = kernelDir;
+        this.resources = resources;
+    }
 }
 }
