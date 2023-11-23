@@ -1,7 +1,7 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //DEPS info.picocli:picocli:4.6.3
 //DEPS com.fasterxml.jackson.core:jackson-databind:2.12.3
-
+//FILES ipc_proxy_kernel.py
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -10,6 +10,9 @@ import picocli.CommandLine.Parameters;
 
 import static java.lang.String.format;
 import static java.lang.System.out;
+import static java.nio.file.Files.createDirectories;
+import static java.nio.file.Files.exists;
+import static java.nio.file.Files.write;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +42,7 @@ class installkernel implements Callable<Integer> {
     private static final String LANGUAGE = "java";
     private static final String INTERRUPT_MODE = "message";
 
+     
     private enum Kernels {
                 IJAVA { 
                     String shortName() { return "IJava"; }
@@ -70,23 +75,27 @@ class installkernel implements Callable<Integer> {
                         "-f", CONNECTION_FILE_MARKER); }
 
                   // List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
-                }
-               /** needs classpath argument that is too tricky to do manually
-                    See https://github.com/jbangdev/jbang/issues/1703  
-                ,KOTLIN {
+                },
+
+               /** 
+                *  requires jbang 0.133 to get https://github.com/jbangdev/jbang/issues/1703 that supports
+                *  %{deps:gav}
+                */
+
+                KOTLIN {
+                    String language() { return "kotlin"; }
                     String shortName() { return "Kotlin"; }
                     String ga() { return "org.jetbrains.kotlinx:kotlin-jupyter-kernel-shadowed"; } 
                     String v() { return "0.12.0-85"; }
                     String javaVersion() { return "11"; }
                     String mainClass() { return "org.jetbrains.kotlinx.jupyter.IkotlinKt"; }
-                    List<String> dependencies() {
+                    /*List<String> dependencies() {
                         return List.of("org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85");
-                    } 
+                    }*/
+                    List<String> arguments() { return List.of(
+                        "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); } 
                 };
-                    **/
-                    ;
                 
-
             String shortName() { return name().substring(0, 1).toUpperCase() + name().substring(1); }
             abstract String ga();
             String v() { return "RELEASE"; }
@@ -135,6 +144,9 @@ class installkernel implements Callable<Integer> {
 
         @Option(names="--timeout", defaultValue = "-1", description = "Timeout in milliseconds for kernel execution")
         long timeout;
+
+        @Option(names="--ipc", defaultValue = "false", description = "Whether to install a proxy kernel that can be used to run kernel with IPC")
+        boolean useIPC;
 
         @Option(names="--compiler-options", defaultValue = "", description = "Compiler options to pass to the kernel")
         String compilerOptions;
@@ -194,38 +206,48 @@ class installkernel implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-    @Override
-    public Integer call() throws Exception { 
-        
-        OSName os = findOSName();
-        if (os == null) {
-            throw new RuntimeException("Operating system is not recognized. Installation failed.");
-        }
+     private installkernel.KernelJson generateProxyKernelJson(installkernel.Kernels kernel, installkernel.KernelJson kernelJson) {
 
-        List<String> installationPath = null;
-        if(jupyterKernelDir!=null) {
-            installationPath = List.of(jupyterKernelDir);
-        } else {
-            installationPath = getInstallationPaths(os);
-        }
+        /**
+         * {
+  "argv": [
+    "/opt/homebrew/opt/python@3.11/bin/python3.11",
+    "/Users/manderse/Library/Jupyter/kernels/jbang-kotlin/ipc_proxy_kernel.py",
+    "{connection_file}",
+    "--kernel=jbang-kotlin_tcp"
+  ],
+  "env": {},
+  "display_name": "Kotlin - kotlin (JBang)",
+  "language": "kotlin",
+  "interrupt_mode": "message",
+  "metadata": {}
+}
+         */
 
-        verbose("Considering " + String.join(",", installationPath));
-        
+         KernelJson proxyKernel = new KernelJson(List.of("python3", "ipc_proxy_kernel.py", CONNECTION_FILE_MARKER, "--kernel="+kernel.shortName()), 
+                        kernel.name() + "_proxy", 
+                        kernel.language(), 
+                        INTERRUPT_MODE, Map.of());
+
+        return proxyKernel;
+    }
+
+    KernelJson generateJavaKernelJson() {
         Path command = null;
         String[] paths = System.getenv("PATH").split(File.pathSeparator);
         for (String path : paths) {
             if (os.equals(OSName.WINDOWS)) {
                 command = Path.of(path, "jbang.cmd");
-                if (Files.exists(command) && Files.isExecutable(command)) {
+                if (exists(command) && Files.isExecutable(command)) {
                     break;
                 } 
                 command = Path.of(path, "jbang.ps1");
-                if (Files.exists(command) && Files.isExecutable(command)) {
+                if (exists(command) && Files.isExecutable(command)) {
                     break;
                 } 
             }
             command = Path.of(path, "jbang");
-            if (Files.exists(command) && Files.isExecutable(command)) {
+            if (exists(command) && Files.isExecutable(command)) {
                 break;
             }
             command = null;
@@ -262,8 +284,70 @@ class installkernel implements Callable<Integer> {
                                 kernel.language(), 
                                 INTERRUPT_MODE, 
                                 kernel.options(compilerOptions, timeout));
+        return json;
+    }
 
+    static OSName os;
 
+    @Override
+    public Integer call() throws Exception { 
+        
+        os = findOSName();
+        if (os == null) {
+            throw new RuntimeException("Operating system is not recognized. Installation failed.");
+        }
+
+        List<String> installationPath = null;
+        if(jupyterKernelDir!=null) {
+            installationPath = List.of(jupyterKernelDir);
+        } else {
+            installationPath = getInstallationPaths(os);
+        }
+
+        verbose("Considering " + String.join(",", installationPath));
+        
+        if(!exists(Paths.get(installationPath.get(0)))) {
+            throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before trying to install a kernel.");
+        }
+
+        KernelJson json = generateJavaKernelJson();
+        writeKernel(installationPath.get(0), json);
+
+        if(useIPC) {
+            out.println("Installing proxy kernel");
+            json = generateProxyKernelJson(kernel, json);
+            writeKernel(installationPath.get(0), json);
+        }
+        
+        return 0;
+    }
+
+  
+
+    private void writeKernel(String installationPath, KernelJson json) throws JsonProcessingException {
+        ObjectMapper objectMapper = setupObjectMapper();
+
+        String jsonString = objectMapper.writeValueAsString(json);
+
+        var output = Paths.get(installationPath, kernelDir(), "kernel.json");
+
+        verbose(format("Writing: %s\nto %s", jsonString, output));
+        try {
+            if (!exists(output.getParent())) {
+                createDirectories(output.getParent());
+            }
+            write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            out.println(kernel.shortName() + " kernel installed to " + output);
+            if(kernel.info()!=null) {
+                out.println("For more information on this specific kernel: " + kernel.info());
+            }
+            out.println("\nBrought to you by https://github.com/jupyter-java");
+       } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private ObjectMapper setupObjectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
         objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -271,32 +355,7 @@ class installkernel implements Callable<Integer> {
         DefaultPrettyPrinter prettyPrinter = new DefaultPrettyPrinter();
         prettyPrinter.indentArraysWith(DefaultIndenter.SYSTEM_LINEFEED_INSTANCE);
         objectMapper.setDefaultPrettyPrinter(prettyPrinter);
-
-        String jsonString = objectMapper.writeValueAsString(json);
-
-        if(!Files.exists(Paths.get(installationPath.get(0)))) {
-            throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before running javajupyter.");
-        }
-
-        var output = Paths.get(installationPath.get(0), kernelDir(), "kernel.json");
-
-        verbose(format("Writing: %s\nto %s", jsonString, output));
-        try {
-            if (!Files.exists(output.getParent())) {
-                Files.createDirectories(output.getParent());
-            }
-            Files.write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            System.out.println(kernel.shortName() + " kernel installed to " + output);
-            if(kernel.info()!=null) {
-                System.out.println("For more information on this specific kernel: " + kernel.info());
-            }
-            System.out.println("\nBrought to you by https://github.com/jupyter-java");
-       } catch (IOException e) {
-            e.printStackTrace();
-        }
-        
-
-        return 0;
+        return objectMapper;
     }
 
     void verbose(String msg) { 
