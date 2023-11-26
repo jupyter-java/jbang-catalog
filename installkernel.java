@@ -124,6 +124,15 @@ class installkernel implements Callable<Integer> {
                 return Map.of();
             }
             String info() { return null; }
+            public String displayName() {
+                // doing this so it becomes "Kotlin (j!)" rather than "Kotlin (Kotlin/j!)"
+
+                if(language().toLowerCase().equals(shortName().toLowerCase()))
+                    return language() + " (j!)";
+                else {   
+                 return language() + " (" + shortName() + "/j!)";
+                }
+            }
         }
 
 
@@ -137,7 +146,7 @@ class installkernel implements Callable<Integer> {
         String name;
 
         String name() { 
-            return name==null? kernel.language() + " (" + kernel.shortName() + "/j!)":name;
+            return name==null? kernel.displayName():name;
         }
 
         @Option(names = "--jupyter-kernel-dir", description = "The name of directory to install the kernel to. Defaults to OS specific location.")
