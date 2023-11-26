@@ -94,7 +94,7 @@ class installkernel implements Callable<Integer> {
                     String language() { return "kotlin"; }
                     String shortName() { return "Kotlin"; }
                     String ga() { return "org.jetbrains.kotlinx:kotlin-jupyter-kernel-shadowed"; } 
-                    String v() { return "0.12.0-85"; }
+                    String v() { return "0.12.0-93"; }
                     String javaVersion() { return "11"; }
                     String mainClass() { return "org.jetbrains.kotlinx.jupyter.IkotlinKt"; }
                     /*List<String> dependencies() {
