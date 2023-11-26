@@ -137,7 +137,7 @@ class installkernel implements Callable<Integer> {
         String name;
 
         String name() { 
-            return name==null? kernel.shortName() + " - " + kernel.language() + " (JBang)":name;
+            return name==null? kernel.language() + " (" + kernel.shortName() + "/j!)":name;
         }
 
         @Option(names = "--jupyter-kernel-dir", description = "The name of directory to install the kernel to. Defaults to OS specific location.")
@@ -277,17 +277,17 @@ class installkernel implements Callable<Integer> {
                              "{{KERNEL_DIR}}/ipc_proxy_kernel.py", 
                                 CONNECTION_FILE_MARKER, 
                                 "--kernel="+kernelJson.kernelDir), 
-                        name() + "-ipc", 
+                        name(), 
                         kernel.language(), 
                         INTERRUPT_MODE, 
                         Map.of(),
-                        kernelDir() + "-ipc",
+                        kernelDir(),
                         Map.of(Path.of("ipc_proxy_kernel.py"), proxyApp));
 
         return proxyKernel;
     }
 
-    KernelJson generateJavaKernelJson() {
+    KernelJson generateJavaKernelJson(String postfix) {
         Path command = findCommand("jbang");
         if (command == null) {
             throw new IllegalStateException("jbang executable not found. Please ensure it is available before running install kernel.");
@@ -317,11 +317,11 @@ class installkernel implements Callable<Integer> {
         commandList.addAll(kernel.arguments());
 
         KernelJson json = new KernelJson(commandList, 
-                                name(), 
+                                name() + postfix, 
                                 kernel.language(), 
                                 INTERRUPT_MODE, 
                                 kernel.options(compilerOptions, timeout),
-                                kernelDir(),
+                                kernelDir() + postfix,
                                 Map.of());
         return json;
     }
@@ -335,6 +335,13 @@ class installkernel implements Callable<Integer> {
         if (os == null) {
             throw new RuntimeException("Operating system is not recognized. Installation failed.");
         }
+
+        String postfix = "";
+        if(useIPC || "ipc".equals(System.getenv("COLAB_JUPYTER_TRANSPORT"))) {
+            useIPC = true;
+            postfix = "-tcp";
+        }
+
 
         List<String> installationPath = null;
         if(jupyterKernelDir!=null) {
@@ -351,10 +358,11 @@ class installkernel implements Callable<Integer> {
            // throw new IllegalStateException("Jupyter Kernel path " + installationPath.get(0) + " does not exist. Please ensure it is available before trying to install a kernel.");
         }
 
-        KernelJson json = generateJavaKernelJson();
+        
+        KernelJson json = generateJavaKernelJson(postfix);
         writeKernel(installationPath.get(0), json);
 
-        if(useIPC || "ipc".equals(System.getenv("COLAB_JUPYTER_TRANSPORT"))) {
+        if(useIPC) {
             json = generateProxyKernelJson(json);
             writeKernel(installationPath.get(0), json);
         }
