@@ -101,7 +101,25 @@ class installkernel implements Callable<Integer> {
                         return List.of("org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85");
                     }*/
                     List<String> arguments() { return List.of(
-                        "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); } 
+                        "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); }},
+
+             /* 
+              beakerx is too dependent on beakerx kernel base file locations to be able to use it as a library.
+                it looks for "runtimetools.jar" in a location relative to base kernel and dynamically loads them.
+                Not good.
+             BEAKERX {
+                    String language() { return "java"; }
+                    String shortName() { return "BeakerX-Java"; }
+                    String ga() { return "com.github.twosigma.beakerx:beaker-kernel-java"; } 
+                    String v() { return "1.5.0"; }
+                    String javaVersion() { return "11"; }
+                   // String mainClass() { return "org.jetbrains.kotlinx.jupyter.IkotlinKt"; }
+                    List<String> dependencies() {
+                        return List.of("com.github.twosigma.beakerx:beaker-kernel-base:1.5.0");
+                    }
+                    //List<String> arguments() { return List.of(
+                    //   "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); } 
+                    */
                 };
                 
             String shortName() { return name().substring(0, 1).toUpperCase() + name().substring(1); }
@@ -314,6 +332,11 @@ class installkernel implements Callable<Integer> {
         if(kernel.modules().size()>0) {
             commandList.add("-R--add-modules");
             commandList.add("-R" + String.join(",", kernel.modules()));
+        }
+
+        if(kernel.dependencies().size()>0) {
+            commandList.add("--deps");
+            commandList.add(String.join(",", kernel.dependencies()));
         }
 
         kernel.jvmArguments().forEach(jvmArg -> {
