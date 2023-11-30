@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
@@ -57,6 +58,12 @@ class installkernel implements Callable<Integer> {
                     String ga() { return "com.github.waikato.thirdparty:ijava"; } 
                     String v() { return "1.3.0"; }
                     String info() { return "https://github.com/SpencerPark/IJava";}
+                    Map<String, String> options(String compilerOptions, long timeout) {
+                        return Map.of(
+                                    "IJAVA_COMPILER_OPTS",compilerOptions,
+                                    "RJK_INIT_SCRIPT", "",
+                                    "RJK_TIMEOUT_MILLIS", ""+timeout);
+                    }
                 },
                 RAPAIO { 
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
@@ -68,7 +75,7 @@ class installkernel implements Callable<Integer> {
                     Map<String, String> options(String compilerOptions, long timeout) {
                         return Map.of(
                                     "RJK_COMPILER_OPTIONS",compilerOptions,
-                                    "RJK_INIT_SCRIPT", "",
+                                   // "RJK_INIT_SCRIPT", "",
                                     "RJK_TIMEOUT_MILLIS", ""+timeout);
                     }
                 },
@@ -159,6 +166,16 @@ class installkernel implements Callable<Integer> {
             return kernelDir==null?"jbang-" + kernel.name().toLowerCase():kernelDir;
         }
 
+        @Option(names="--enable-preview", description = "Whether to use preview versions of Java")
+        boolean preview;
+
+        @Option(names="--java", description = "Java version to use for kernel. '17' means Java 17 only, '17+' means Java 17 or higher.")
+        String java;
+
+        String java() { 
+            return java==null?kernel.javaVersion():java;
+        }
+
         @Option(names="--timeout", defaultValue = "-1", description = "Timeout in milliseconds for kernel execution")
         long timeout;
 
@@ -167,6 +184,14 @@ class installkernel implements Callable<Integer> {
 
         @Option(names="--compiler-options", defaultValue = "", description = "Compiler options to pass to the kernel")
         String compilerOptions;
+
+        String compilerOptions() {
+            if(preview) {
+                return "--enable-preview --source " + java().replace("+", "") + Objects.toString(compilerOptions, "");
+            } else {
+                return compilerOptions;
+            }
+        }
 
         private enum OSName {
                 LINUX,
@@ -304,7 +329,10 @@ class installkernel implements Callable<Integer> {
         var commandList = new ArrayList<String>(); 
         commandList.add(command.toAbsolutePath().toString());
         commandList.add("--java");
-        commandList.add(kernel.javaVersion());
+        commandList.add(java());
+
+        if(preview)
+            commandList.add("--enable-preview");
         
         if(kernel.mainClass()!=null) {
             commandList.add("-m");
@@ -329,7 +357,7 @@ class installkernel implements Callable<Integer> {
                                 name() + postfix, 
                                 kernel.language(), 
                                 INTERRUPT_MODE, 
-                                kernel.options(compilerOptions, timeout),
+                                kernel.options(compilerOptions(), timeout),
                                 kernelDir() + postfix,
                                 Map.of());
         return json;
