@@ -91,12 +91,25 @@ class installkernel implements Callable<Integer> {
 
                   // List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
                 },
+                /*
+                ALMOND { 
+                    String info() { return "https://almond.sh/"; }
+                    String shortName() { return "Almond"; }
+                    String language() { return "scala"; }
+                    String ga() { return "sh.almond:launcher_3"; } 
+                    String v() { return "0.14.0-RC14"; }
+                    String javaVersion() { return "21"; }
+                    String mainClass() { return null; }
+                    List<String> arguments() { return List.of(
+                        "--connection-file", CONNECTION_FILE_MARKER); } 
+                },
+                 */
 
                /** 
                 *  requires jbang 0.133 to get https://github.com/jbangdev/jbang/issues/1703 that supports
                 *  %{deps:gav}
                 */
-
+                
                 KOTLIN {
                     String language() { return "kotlin"; }
                     String shortName() { return "Kotlin"; }
@@ -110,6 +123,7 @@ class installkernel implements Callable<Integer> {
                     List<String> arguments() { return List.of(
                         "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); } 
                 };
+
                 
             String shortName() { return name().substring(0, 1).toUpperCase() + name().substring(1); }
             abstract String ga();
@@ -143,7 +157,7 @@ class installkernel implements Callable<Integer> {
         }
 
 
-        @Parameters(index = "0", defaultValue = "ijava", description = "The kernel to install. Possible values: ${COMPLETION-CANDIDATES}")
+        @Parameters(defaultValue = "ijava", description = "The kernel to install. Possible values: ${COMPLETION-CANDIDATES}")
         Kernels kernel;
 
         @Option(names = "--verbose")
@@ -169,6 +183,12 @@ class installkernel implements Callable<Integer> {
         @Option(names="--enable-preview", description = "Whether to use preview versions of Java")
         boolean preview;
 
+        @Option(names="--assertions", description = "Should assertions be enabled", defaultValue = "true")
+        boolean assertions;
+
+        @Option(names="--parameters", description = "Should parameter info be available at runtime", defaultValue = "true")
+        boolean parameters;
+
         @Option(names="--java", description = "Java version to use for kernel. '17' means Java 17 only, '17+' means Java 17 or higher.")
         String java;
 
@@ -186,11 +206,16 @@ class installkernel implements Callable<Integer> {
         String compilerOptions;
 
         String compilerOptions() {
+            String defaultOptions = Objects.toString(compilerOptions, "");
             if(preview) {
-                return "--enable-preview --source " + java().replace("+", "") + Objects.toString(compilerOptions, "");
-            } else {
-                return compilerOptions;
-            }
+                defaultOptions = defaultOptions + "--enable-preview --source " + java().replace("+", "");
+            } 
+
+           /*  if(parameters) {
+                defaultOptions = defaultOptions + " --parameters";
+            }*/
+
+            return defaultOptions;
         }
 
         private enum OSName {
@@ -334,6 +359,10 @@ class installkernel implements Callable<Integer> {
         if(preview)
             commandList.add("--enable-preview");
         
+         if(assertions) {
+                commandList.add("--ea");
+         }
+
         if(kernel.mainClass()!=null) {
             commandList.add("-m");
             commandList.add(kernel.mainClass());
@@ -343,6 +372,8 @@ class installkernel implements Callable<Integer> {
             commandList.add("-R--add-modules");
             commandList.add("-R" + String.join(",", kernel.modules()));
         }
+
+        commandList.add("-R-ea");
 
         kernel.jvmArguments().forEach(jvmArg -> {
             commandList.add("-R" + jvmArg);
