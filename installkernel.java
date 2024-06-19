@@ -285,6 +285,10 @@ class installkernel implements Callable<Integer> {
      * @return
      */
     private Path findCommand(String cmd) {
+        if ("jbang".equals(cmd) && System.getenv("JBANG_LAUNCH_CMD") != null) {
+            return Path.of(System.getenv("JBANG_LAUNCH_CMD"));
+        }
+
         Path command = null;
         List<String> paths = new ArrayList<>();
 
