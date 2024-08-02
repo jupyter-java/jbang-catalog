@@ -69,8 +69,8 @@ class installkernel implements Callable<Integer> {
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
                     String shortName() { return "Rapaio"; }
                     String ga() { return "io.github.padreati:rapaio-jupyter-kernel"; } 
-                    String v() { return "1.3.0"; }
-                    String javaVersion() { return "21"; }
+                    String v() { return "2.1.0@fatjar"; }
+                    String javaVersion() { return "22"; }
                     List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
                     Map<String, String> options(String compilerOptions, long timeout) {
                         return Map.of(
