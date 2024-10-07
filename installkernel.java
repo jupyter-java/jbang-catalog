@@ -60,9 +60,19 @@ class installkernel implements Callable<Integer> {
                     String info() { return "https://github.com/SpencerPark/IJava";}
                     Map<String, String> options(String compilerOptions, long timeout) {
                         return Map.of(
-                                    "IJAVA_COMPILER_OPTS",compilerOptions,
-                                    "RJK_INIT_SCRIPT", "",
-                                    "RJK_TIMEOUT_MILLIS", ""+timeout);
+                                    "IJAVA_COMPILER_OPTS",compilerOptions
+                                    );
+                    }
+                },
+                JJAVA { 
+                    String shortName() { return "JJava"; }
+                    String ga() { return "org.dflib.jjava:jjava"; } 
+                    String v() { return "1.0-M3"; }
+                    String info() { return "https://github.com/dflib/jjava";}
+                    Map<String, String> options(String compilerOptions, long timeout) {
+                        return Map.of(
+                                    "JJAVA_COMPILER_OPTS",compilerOptions,
+                                    "JJAVA_TIMEOUT", ""+timeout);
                     }
                 },
                 RAPAIO { 
