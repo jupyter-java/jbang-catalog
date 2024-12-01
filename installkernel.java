@@ -66,20 +66,25 @@ class installkernel implements Callable<Integer> {
                 },
                 JJAVA { 
                     String shortName() { return "JJava"; }
-                    String ga() { return "org.dflib.jjava:jjava"; } 
-                    String v() { return "1.0-M3"; }
+                    String ga() { return "org.dflib.jjava:jjava-launcher"; } 
+                    String v() { return "1.0-a4"; }
                     String info() { return "https://github.com/dflib/jjava";}
                     Map<String, String> options(String compilerOptions, long timeout) {
-                        return Map.of(
-                                    "JJAVA_COMPILER_OPTS",compilerOptions,
-                                    "JJAVA_TIMEOUT", ""+timeout);
+                        return Map.of();
+                    }
+                    List<String> arguments() { return List.of(
+                        "%{deps:org.dflib.jjava:jjava:" + v() + "@fatjar}", CONNECTION_FILE_MARKER); } 
+
+                    @Override
+                    List<String> jvmArguments() {
+                        return List.of();
                     }
                 },
                 RAPAIO { 
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
                     String shortName() { return "Rapaio"; }
                     String ga() { return "io.github.padreati:rapaio-jupyter-kernel"; } 
-                    String v() { return "2.1.0@fatjar"; }
+                    String v() { return "2.2.0@fatjar"; }
                     String javaVersion() { return "22"; }
                     List<String> modules() { return List.of("java.base", "jdk.incubator.vector"); }
                     Map<String, String> options(String compilerOptions, long timeout) {
@@ -124,14 +129,14 @@ class installkernel implements Callable<Integer> {
                     String language() { return "kotlin"; }
                     String shortName() { return "Kotlin"; }
                     String ga() { return "org.jetbrains.kotlinx:kotlin-jupyter-kernel-shadowed"; } 
-                    String v() { return "0.12.0-93"; }
+                    String v() { return "0.12.0-339"; }
                     String javaVersion() { return "11"; }
                     String mainClass() { return "org.jetbrains.kotlinx.jupyter.IkotlinKt"; }
                     /*List<String> dependencies() {
                         return List.of("org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85");
                     }*/
                     List<String> arguments() { return List.of(
-                        "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:0.12.0-85}", CONNECTION_FILE_MARKER); } 
+                        "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:" + v() + "}", CONNECTION_FILE_MARKER); } 
                 };
 
                 
@@ -145,7 +150,7 @@ class installkernel implements Callable<Integer> {
             List<String> dependencies() { return List.of(); }
             List<String> modules() { return List.of(); }
             List<String> jvmArguments() { return List.of(
-                "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+                    "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
                         "--illegal-access=permit"
                      //   "-Djava.awt.headless=true",
                      //   "-Djdk.disableLastUsageTracking=true"
