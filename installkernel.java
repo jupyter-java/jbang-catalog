@@ -172,7 +172,7 @@ class installkernel implements Callable<Integer> {
         }
 
 
-        @Parameters(defaultValue = "ijava", description = "The kernel to install. Possible values: ${COMPLETION-CANDIDATES}")
+        @Parameters(defaultValue = "jjava", description = "The kernel to install. Possible values: ${COMPLETION-CANDIDATES}")
         Kernels kernel;
 
         @Option(names = "--verbose")
