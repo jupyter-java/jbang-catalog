@@ -80,6 +80,15 @@ class installkernel implements Callable<Integer> {
                         return List.of();
                     }
                 },
+                JBANG {
+                    String info() { return "https://github.com/maxandersen/jbang-catalog"; }
+                    String shortName() { return "Experimental JBang"; }
+                    String scriptRef() { return "jupyter-jbang@maxandersen"; }
+                    String ga() { return null; }
+                    String javaVersion() { return "17+"; }
+                    List<String> arguments() { return List.of(CONNECTION_FILE_MARKER); }
+                    List<String> jvmArguments() { return List.of(); }
+                },
                 RAPAIO { 
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
                     String shortName() { return "Rapaio"; }
@@ -139,11 +148,12 @@ class installkernel implements Callable<Integer> {
                         "-cp=%{deps:org.jetbrains.kotlinx:kotlin-jupyter-lib:" + v() + "}", CONNECTION_FILE_MARKER); } 
                 };
 
+               
                 
             String shortName() { return name().substring(0, 1).toUpperCase() + name().substring(1); }
             abstract String ga();
             String v() { return "RELEASE"; }
-            String gav() { return ga() + ":" + v(); }
+            String scriptRef() { return ga() + ":" + v(); }
             String javaVersion() { return "11+"; }
             String mainClass() { return null; }
             String language() { return LANGUAGE;}
@@ -398,7 +408,7 @@ class installkernel implements Callable<Integer> {
             commandList.add("-R" + jvmArg);
         });
         
-        commandList.add(kernel.gav());
+        commandList.add(kernel.scriptRef());
         
         
         commandList.addAll(kernel.arguments());
