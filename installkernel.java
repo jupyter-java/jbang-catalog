@@ -88,7 +88,7 @@ class installkernel implements Callable<Integer> {
                     String ga() { return null; }
                     String javaVersion() { return "17+"; }
                     List<String> arguments() { return List.of(CONNECTION_FILE_MARKER); }
-                    List<String> jvmArguments() { return List.of(); }
+                    List<String> jvmArguments() { return List.of("--add-opens", "jdk.jshell/jdk.jshell=ALL-UNNAMED"); }
                 },
                 RAPAIO { 
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
