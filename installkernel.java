@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
@@ -204,6 +205,9 @@ class installkernel implements Callable<Integer> {
         String kernelDir() { 
             return kernelDir==null?"jbang-" + kernel.name().toLowerCase():kernelDir;
         }
+
+        @Option(names = "--script-ref", description = "Override script reference to use for the kernel. Defaults to the kernel's script reference.")
+        Optional<String> scriptRef;
 
         @Option(names="--enable-preview", description = "Whether to use preview versions of Java")
         boolean preview;
@@ -408,7 +412,7 @@ class installkernel implements Callable<Integer> {
             commandList.add("-R" + jvmArg);
         });
         
-        commandList.add(kernel.scriptRef());
+        commandList.add(scriptRef.orElse(kernel.scriptRef()));
         
         
         commandList.addAll(kernel.arguments());
