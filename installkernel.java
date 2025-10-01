@@ -89,7 +89,7 @@ class installkernel implements Callable<Integer> {
                     }
                 },
                 JBANG {
-                    String info() { return "https://github.com/maxandersen/jbang-catalog"; }
+                    String info() { return "https://github.com/jbangdev/jbang-jupyter"; }
                     String shortName() { return "Experimental JBang"; }
                     String scriptRef() { return "jbang-jupyter@jbangdev"; }
                     String ga() { return null; }
