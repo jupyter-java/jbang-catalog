@@ -11,11 +11,16 @@ import static java.nio.file.Files.createDirectories;
 import static java.nio.file.Files.exists;
 import static java.nio.file.Files.write;
 
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,6 +34,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
+
+import javax.imageio.ImageIO;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -84,11 +91,13 @@ class installkernel implements Callable<Integer> {
                 JBANG {
                     String info() { return "https://github.com/maxandersen/jbang-catalog"; }
                     String shortName() { return "Experimental JBang"; }
-                    String scriptRef() { return "jupyter-jbang@maxandersen"; }
+                    String scriptRef() { return "jbang-jupyter@jbangdev"; }
                     String ga() { return null; }
                     String javaVersion() { return "17+"; }
+                    URI logo() { return URI.create("https://raw.githubusercontent.com/jbangdev/jbang/refs/heads/main/images/jbang_icon.png"); }
                     List<String> arguments() { return List.of(CONNECTION_FILE_MARKER); }
                     List<String> jvmArguments() { return List.of("--add-opens", "jdk.jshell/jdk.jshell=ALL-UNNAMED"); }
+
                 },
                 RAPAIO { 
                     String info() { return "https://github.com/padreati/rapaio-jupyter-kernel"; }
@@ -160,6 +169,7 @@ class installkernel implements Callable<Integer> {
             String language() { return LANGUAGE;}
             List<String> dependencies() { return List.of(); }
             List<String> modules() { return List.of(); }
+            URI logo() { return null; }
             List<String> jvmArguments() { return List.of(
                     "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
                         "--illegal-access=permit"
@@ -500,6 +510,38 @@ class installkernel implements Callable<Integer> {
             }
             write(output, jsonString.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             out.println(json.displayName + " kernel installed to " + output);
+            if(kernel.logo()!=null) {
+                try {
+                    URL logoUrl = kernel.logo().toURL();
+                    java.awt.image.BufferedImage originalImage = ImageIO.read(logoUrl);
+                    
+                    // Scale to 32x32
+                    BufferedImage image32 = new BufferedImage(32, 32, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g32 = image32.createGraphics();
+                    g32.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                    g32.drawImage(originalImage, 0, 0, 32, 32, null);
+                    g32.dispose();
+                    
+                    // Scale to 64x64
+                    BufferedImage image64 = new BufferedImage(64, 64, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g64 = image64.createGraphics();
+                    g64.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                    g64.drawImage(originalImage, 0, 0, 64, 64, null);
+                    g64.dispose();
+                    
+                    // Save scaled images
+                    Path logo32Path = Paths.get(installationPath, json.kernelDir, "logo-32x32.png");
+                    Path logo64Path = Paths.get(installationPath, json.kernelDir, "logo-64x64.png");
+                    
+                    ImageIO.write(image32, "PNG", logo32Path.toFile());
+                    ImageIO.write(image64, "PNG", logo64Path.toFile());
+                    
+                    out.println("32x32 logo saved to " + output.getParent().relativize(logo32Path));
+                    out.println("64x64 logosaved to " + output.getParent().relativize(logo64Path));
+                } catch (IOException e) {
+                    System.err.println("Could not download and save logo files: " + e.getMessage());
+                }
+            }
             json.resources.forEach((path, content) -> {
                 try {
                     Path resource = Paths.get(installationPath, json.kernelDir, path.toString());
