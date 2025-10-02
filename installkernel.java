@@ -3,6 +3,7 @@
 //JAVA 11+
 //DEPS info.picocli:picocli:4.6.3
 //DEPS com.fasterxml.jackson.core:jackson-databind:2.12.3
+//JAVA_OPTIONS -Djava.awt.headless=true
 //FILES ipc_proxy_kernel.py
 
 import static java.lang.String.format;
