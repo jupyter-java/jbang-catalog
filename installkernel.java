@@ -200,6 +200,9 @@ class installkernel implements Callable<Integer> {
         @Option(names = "--verbose")
         boolean verbose;
 
+        @Option(names = "--force", description = "Whether to overwrite existing kernel.")
+        boolean force;
+
         @Option(names = "--name")
         String name;
 
@@ -210,12 +213,15 @@ class installkernel implements Callable<Integer> {
         @Option(names = "--jupyter-kernel-dir", description = "The name of directory to install the kernel to. Defaults to OS specific location.")
         String jupyterKernelDir;
 
-        @Option(names = "--kernel-dir", description = "The name of directory to install the kernel to. Defaults to jbang-<kernel>")
+        @Option(names = "--kernel-dir", description = "The name of directory to install the kernel to. Defaults to <kernelname>")
         String kernelDir;
 
         String kernelDir() { 
-            return kernelDir==null?"jbang-" + kernel.name().toLowerCase():kernelDir;
+            return kernelDir==null?kernel.name().toLowerCase():kernelDir;
         }
+
+        @Option(names = "--debug", description = "Debug options to pass to JBang, i.e --debug address=5000? --debug suspend=n")
+        Map<String, String> debug = Map.of(); 
 
         @Option(names = "--script-ref", description = "Override script reference to use for the kernel. Defaults to the kernel's script reference.")
         Optional<String> scriptRef;
@@ -400,6 +406,10 @@ class installkernel implements Callable<Integer> {
         commandList.add("--java");
         commandList.add(java());
 
+        debug.forEach((key, value) -> {
+            commandList.add("-d" + key + "=" + value);
+        });
+
         if(preview)
             commandList.add("--enable-preview");
         
@@ -472,7 +482,7 @@ class installkernel implements Callable<Integer> {
 
         
         KernelJson json = generateJavaKernelJson(postfix);
-        writeKernel(installationPath.get(0), json);
+        if(writeKernel(installationPath.get(0), json)) {
 
         if(useIPC) {
             json = generateProxyKernelJson(json);
@@ -483,16 +493,27 @@ class installkernel implements Callable<Integer> {
                 out.println("For more information on this specific kernel: " + kernel.info());
         }
         out.println("\nBrought to you by https://github.com/jupyter-java");
+    
         return 0;
+    } else {
+        return 1;
+    }
     }
 
   
 
-    private void writeKernel(String installationPath, KernelJson original) throws JsonProcessingException {
+    private boolean writeKernel(String installationPath, KernelJson original) throws JsonProcessingException {
         ObjectMapper objectMapper = setupObjectMapper();
 
         var fullKernelDir = Paths.get(installationPath, original.kernelDir).toAbsolutePath().toString();
         var output = Paths.get(fullKernelDir, "kernel.json");
+
+        if(!force) {
+            if(exists(output)) {
+                out.println("A kernel already installed to " + output + ". Use --force to overwrite.");
+                return false;
+            }
+        }
 
         final var json = new KernelJson(original.argv.stream().map(arg -> arg.replace("{{KERNEL_DIR}}", fullKernelDir)).collect(Collectors.toList()), 
                                 original.displayName, 
@@ -504,6 +525,7 @@ class installkernel implements Callable<Integer> {
 
         String jsonString = objectMapper.writeValueAsString(json);
 
+       
         verbose(format("Writing: %s\nto %s", jsonString, output));
         try {
             if (!exists(output.getParent())) {
@@ -559,7 +581,10 @@ class installkernel implements Callable<Integer> {
             
        } catch (IOException e) {
             e.printStackTrace();
+            return false;
         }
+       return true;
+
     }
 
     private ObjectMapper setupObjectMapper() {
